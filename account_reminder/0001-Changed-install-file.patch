@@ -1,0 +1,46 @@
+From 188b4ad81067132e0136f1c080f218ed41e5e813 Mon Sep 17 00:00:00 2001
+From: Tim Lievens <timlievens@gmail.com>
+Date: Mon, 14 Jan 2019 19:57:48 +0100
+Subject: [PATCH 1/1] Changed install file
+
+---
+ account_reminder.install | 18 +++++++++++++++++-
+ 1 file changed, 17 insertions(+), 1 deletion(-)
+
+diff --git a/account_reminder.install b/account_reminder.install
+index 35d2108..57d6be8 100644
+--- a/account_reminder.install
++++ b/account_reminder.install
+@@ -21,7 +21,12 @@ function account_reminder_schema() {
+         'description' => t('The number of times a reminder has been sent to a user.'),
+         'type' => 'int',
+         'default' => 0,
+-        ),
++      ),
++	  'msg_block' => array(
++        'description' => t('The number of times a block reminder has been sent to a user.'),
++        'type' => 'int',
++        'default' => 0,
++      ),
+     ),
+     'primary key' => array('uid'),
+   );
+@@ -73,4 +78,15 @@ function account_reminder_uninstall() {
+   variable_del('account_reminder_total');
+   variable_del('account_reminder_subject');
+   variable_del('account_reminder_msg');
++  variable_del('account_reminder_first_blocknotify');
++  variable_del('account_reminder_nologin_frequency');
++  variable_del('account_reminder_nologin_total');
++  variable_del('account_reminder_roles');
++  variable_del('account_reminder_notify_admin');
++  variable_del('account_reminder_bcc');
++  variable_del('account_reminder_block_msg');
++  variable_del('account_reminder_block_subject');
++  variable_del('account_reminder_isblock_bcc');
++  variable_del('account_reminder_isblock_msg');
++  variable_del('account_reminder_isblock_subject');
+ }
+-- 
+2.16.3
+

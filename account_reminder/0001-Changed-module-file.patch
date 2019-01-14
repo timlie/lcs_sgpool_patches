@@ -1,0 +1,465 @@
+From ccd66f2afe9fa2482511ddd62318612559e09791 Mon Sep 17 00:00:00 2001
+From: Tim Lievens <timlievens@gmail.com>
+Date: Mon, 14 Jan 2019 19:59:16 +0100
+Subject: [PATCH 1/1] Changed module file
+
+---
+ account_reminder.module | 322 +++++++++++++++++++++++++++++++++++++++++-------
+ 1 file changed, 279 insertions(+), 43 deletions(-)
+
+diff --git a/account_reminder.module b/account_reminder.module
+index 68094cc..78e94e4 100644
+--- a/account_reminder.module
++++ b/account_reminder.module
+@@ -2,11 +2,7 @@
+ // $Id: account_reminder.module,v 1.7.2.7 2008/09/17 12:30:19 jaydub Exp $
+ 
+ /**
+- * Module by Computerminds http://www.computerminds.co.uk Jan 2007
+- *
+- * Upgraded to Drupal 5 with contributions from maartenvg
+- * PostgreSQL support added by jaydub
+- * Upgraded to Drupal 6 by jaydub
++ * Module by LievensComputerservice APR 2009
+  *
+  * This module is to remind users who have signed up a user account,
+  * but have never signed in. It's driven by the cron job and can be
+@@ -61,10 +57,13 @@ function account_reminder_menu() {
+  */
+ function account_reminder_settings() {
+   $form = array();
++  $roles = user_roles($membersonly = TRUE);
+ 
+   $form['frequency'] = array(
+     '#type' => 'fieldset',
+-    '#title' => t('Reminder frequency'),
++    '#title' => t('Reminder frequency for users who have no timestamp'),
++	'#collapsible' => TRUE,
++	'#collapsed' => TRUE,
+   );
+   $form['frequency']['account_reminder_initial'] = array(
+     '#type' => 'textfield',
+@@ -87,10 +86,20 @@ function account_reminder_settings() {
+     '#description' => t("Total number of reminders to send before giving up, you can't win 'em all!"),
+     '#size' => 10,
+   );
++  $form['frequency']['account_reminder_roles'] = array(
++    '#type' => 'select',
++	'#title' => t('Which roles to remind'),
++	'#default_value' => variable_get('account_reminder_roles', 'authenticated user'),
++	'#description' => t('Which roles should get these reminder emails?'),
++	'#multiple' => TRUE,
++	'#options' => $roles,
++  );
+                                             
+   $form['mail'] = array(
+     '#type' => 'fieldset',
+-    '#title' => t('Reminder email details'),
++    '#title' => t('Reminder email details for users who have no timestamp'),
++	'#collapsible' => TRUE,
++	'#collapsed' => TRUE,
+   );
+   $form['mail']['account_reminder_bcc'] = array(
+     '#type' => 'textfield',
+@@ -109,28 +118,131 @@ function account_reminder_settings() {
+     '#type' => 'textarea',
+     '#title' => t('Email body'),
+     '#default_value' => variable_get('account_reminder_msg', 
+-t('%username,
++t('Dear %username,
+ 
+-This is a reminder from %site. You have registered for a user account but have not yet validated your email address. To fully activate your account at %login_uri login use the following username and password:
++This is a reminder (reminder nr. %countreminders from %totalreminders reminders) from %site. You have registered for a user account but have not yet logged in to the site. To fully activate your account you have to login and fill in your credentials.
++
++You can login at %login_uri using the following username:
+ 
+ username: %username
+-password: %password
+ 
+-You may also log in by clicking on this link or copying and pasting it in your browser:
++If you lost your password you can request a new password on the site.
+ 
+-%login_url
+ 
+-This is a one-time login, so it can be used only once.
++--  %site team
+ 
++If you don\'t want to use %site anymore you can remove your account by using the link below:
++%unsubscribe_url')
++    ),
++    '#description' => t('Customise the body of the email. Valid variables are %site, %username, %login_uri, %login_url (the one time login link), %unsubscribe_url (A URL allowing users to opt out of recieving the reminder emails) and %password.'),
++  );
++  
++  // inactive user notification
++    $form['account_reminder_notification'] = array(
++      '#type' => 'fieldset',
++      '#title' => t('Reminder frequency for users who have not logged in for amount of time'),
++      '#collapsible' => TRUE,
++      '#collapsed' => TRUE,
++    );
++    $form['account_reminder_notification']['account_reminder_first_blocknotify'] = array(
++      '#type' => 'textfield',
++      '#title' => t('Days till initial reminder'),
++      '#default_value' => variable_get('account_reminder_first_blocknotify', 30),
++      '#description' => t('The time span (in days) between the users last login and the initial reminder being sent.'),
++	  '#size' => 10,
++    );
++	$form['account_reminder_notification']['account_reminder_nologin_frequency'] = array(
++    '#type' => 'textfield',
++    '#title' => t('Days between reminders'),
++    '#default_value' => variable_get('account_reminder_nologin_frequency', 5),
++    '#description' => t('The time (in days) between subsequent reminders.'),
++    '#size' => 10,
++    );
++	$form['account_reminder_notification']['account_reminder_nologin_total'] = array(
++    '#type' => 'textfield',
++    '#title' => t('Total number of reminders'),
++    '#default_value' => variable_get('account_reminder_nologin_total', 2),
++    '#description' => t("Total number of reminders to send before blocking!"),
++    '#size' => 10,
++    );
++	
++	$form['mailblock'] = array(
++    '#type' => 'fieldset',
++    '#title' => t('Reminder email details for users who have not logged in for amount of time'),
++	'#collapsible' => TRUE,
++	'#collapsed' => TRUE,
++    );
++    $form['mailblock']['account_reminder_block_bcc'] = array(
++    '#type' => 'textfield',
++    '#title' => t('Bcc email address'),
++    '#description' => t('If you wish to receive a copy of all account reminder emails, enter an email address to Bcc.'),
++    '#default_value' => variable_get('account_reminder_block_bcc', ''),
++    '#size' => 40,
++    );
++    $form['mailblock']['account_reminder_block_subject'] = array(
++    '#type' => 'textfield',
++    '#title' => t('Email subject'),
++    '#default_value' => variable_get('account_reminder_block_subject', 'Please login at %site for %username'),
++    '#description' => t('The subject of the message with variables %site, %username'),
++    );
++    $form['mailblock']['account_reminder_block_msg'] = array(
++    '#type' => 'textarea',
++    '#title' => t('Email body'),
++    '#default_value' => variable_get('account_reminder_block_msg', 
++t('Dear %username,
+ 
+---  %site team
++This is a reminder (reminder nr. %countremindersblock from %totalreminders reminders) from %site. You have registered for a user account but have not yet logged in to the site. To fully activate your account you have to login and fill in your credentials.
++
++You can login at %login_uri using the following username:
+ 
+-You can stop receiving these reminder emails by either activating your account, or using the unsubscribe link below:
++username: %username
++
++If you lost your password you can request a new password on the site.
+ 
++
++--  %site team
++
++If you don\'t want to use %site anymore you can remove your account by using the link below:
+ %unsubscribe_url')
+     ),
+     '#description' => t('Customise the body of the email. Valid variables are %site, %username, %login_uri, %login_url (the one time login link), %unsubscribe_url (A URL allowing users to opt out of recieving the reminder emails) and %password.'),
+-  );
++    );
++	
++	// inactive user notification block email
++    $form['mailisblock'] = array(
++    '#type' => 'fieldset',
++    '#title' => t('Reminder email details for blocked users'),
++	'#collapsible' => TRUE,
++	'#collapsed' => TRUE,
++    );
++    $form['mailisblock']['account_reminder_isblock_bcc'] = array(
++    '#type' => 'textfield',
++    '#title' => t('Bcc email address'),
++    '#description' => t('If you wish to receive a copy of all account reminder emails, enter an email address to Bcc.'),
++    '#default_value' => variable_get('account_reminder_isblock_bcc', ''),
++    '#size' => 40,
++    );
++    $form['mailisblock']['account_reminder_isblock_subject'] = array(
++    '#type' => 'textfield',
++    '#title' => t('Email subject'),
++    '#default_value' => variable_get('account_reminder_isblock_subject', 'Your account at %site for %username is blocked'),
++    '#description' => t('The subject of the message with variables %site, %username'),
++    );
++    $form['mailisblock']['account_reminder_isblock_msg'] = array(
++    '#type' => 'textarea',
++    '#title' => t('Email body'),
++    '#default_value' => variable_get('account_reminder_isblock_msg', 
++t('Dear %username,
++
++This is a message from %site. You have not logged in before the date we suggested you, so we assume you don\'t want to use %site anymore.
++
++Your account will be blocked tonight.
++
++
++--  %site team')
++    ),
++    '#description' => t('Customise the body of the email. Valid variables are %site, %username, %login_uri, %login_url (the one time login link), %unsubscribe_url (A URL allowing users to opt out of recieving the reminder emails) and %password.'),
++    );
+                                            
+   return system_settings_form($form);
+ }
+@@ -148,6 +260,15 @@ function account_reminder_settings_validate($form, &$form_state) {
+   if (!is_numeric($form_state['values']['account_reminder_total'])) {
+     form_set_error('account_reminder_total', t('You must enter a number for "Total number of reminders".'));
+   }
++  if (!is_numeric($form_state['values']['account_reminder_first_blocknotify'])) {
++    form_set_error('account_reminder_first_blocknotify', t('You must enter a number for "Days till initial reminder".'));
++  }
++  if (!is_numeric($form_state['values']['account_reminder_nologin_frequency'])) {
++    form_set_error('account_reminder_nologin_frequency', t('You must enter a number for "Days between reminders".'));
++  }
++  if (!is_numeric($form_state['values']['account_reminder_nologin_total'])) {
++    form_set_error('account_reminder_nologin_total', t('You must enter a number for "Total number of reminders".'));
++  }
+   if (!empty($form_state['values']['account_reminder_bcc']) && !valid_email_address($form_state['values']['account_reminder_bcc'])) {
+     form_set_error('account_reminder_bcc', t('You must enter a valid email address.'));
+   }
+@@ -163,6 +284,9 @@ function account_reminder_user($op, &$edit, &$user, $category = NULL) {
+     case 'delete':
+       db_query('DELETE FROM {account_reminder} WHERE uid = %d', $user->uid);
+     break;
++	case 'login':
++	  db_query('DELETE FROM {account_reminder} WHERE uid = %d', $user->uid);
++	break;
+   }
+ }
+ 
+@@ -171,25 +295,54 @@ function account_reminder_user($op, &$edit, &$user, $category = NULL) {
+  */
+ function account_reminder_cron() {
+   // Remove users who have signed up from the reminder table...
+-  $result = db_query("DELETE FROM {account_reminder} WHERE uid IN (SELECT uid FROM {users} WHERE login <> 0 AND uid <> 0 AND status = 1)");
++  $result = db_query("DELETE FROM {account_reminder} WHERE uid IN (SELECT uid FROM {users} WHERE status = 0)");
++  
++  // Remove users who have deactivated there account through the email link -> msg_block = total reminders
++  $totalremindersblock = variable_get('account_reminder_nologin_total',3);
++  $result = db_query("SELECT uid FROM {account_reminder} WHERE msg_block = %d", $totalremindersblock);
++    while ($row = db_fetch_object($result)) {
++      db_query("UPDATE {users} SET status = 0 WHERE uid = %d", $row->uid);
++	  db_query("DELETE FROM {account_reminder} WHERE uid = %d", $row->uid);
++    }
+ 
+   $first_wait = variable_get('account_reminder_initial', 10);
+   $period = variable_get('account_reminder_frequency', 14);
+   $total_messages = variable_get('account_reminder_total', 3);
++  $first_wait_block = variable_get('account_reminder_first_blocknotify', 30);
++  $period_block = variable_get('account_reminder_nologin_frequency', 5);
++  $total_messages_block = variable_get('account_reminder_nologin_total', 2);
++  $roles = variable_get('account_reminder_roles', 2);
+   
+   // Add users to the account_reminder table who are not already
+-  $result = db_query("SELECT u.*, COALESCE(ar.msg_cnt, 0) AS msg_cnt, COALESCE(ar.last_reminder, %d) AS last_reminder FROM {users} u LEFT JOIN {account_reminder} ar ON u.uid = ar.uid WHERE u.login = 0 AND u.uid <> 0 AND u.status = 1", time());
++  $result = db_query("SELECT DISTINCT u.*, COALESCE(ar.msg_cnt, 0) AS msg_cnt, COALESCE(ar.msg_block, 0) AS msg_block, COALESCE(ar.last_reminder, %d) AS last_reminder FROM {users} u INNER JOIN users_roles ur ON u.uid = ur.uid LEFT JOIN {account_reminder} ar ON u.uid = ar.uid WHERE u.uid <> 0 AND u.status = 1 AND ur.rid IN (" . implode(', ', $roles) . ")", time());
+   while ($row = db_fetch_object($result)) {
+-    if ($row->msg_cnt == 0 && ($row->created + (60 * 60 * 24 * $first_wait) < time())) {
+-      account_reminder_send_email($row);
+-      db_query("DELETE FROM {account_reminder} WHERE uid = %d", $row->uid);
+-      db_query("INSERT INTO {account_reminder} (uid, last_reminder, msg_cnt) VALUES (%d, %d, %d)", $row->uid, time(), ($row->msg_cnt + 1));
++    if ($row->login == 0) {
++	  if ($row->msg_cnt == 0 && ($row->created + (60 * 60 * 24 * $first_wait) < time())) {
++        account_reminder_nologin_send_email($row);
++        db_query("DELETE FROM {account_reminder} WHERE uid = %d", $row->uid);
++        db_query("INSERT INTO {account_reminder} (uid, last_reminder, msg_cnt) VALUES (%d, %d, %d)", $row->uid, time(), ($row->msg_cnt + 1));
++      }
++      elseif (((time() - $row->last_reminder) / 86400) > $period && ($row->msg_cnt >= 0 && ($row->msg_cnt + 1 < $total_messages))) {
++        account_reminder_nologin_send_email($row);
++        db_query("DELETE FROM {account_reminder} WHERE uid = %d", $row->uid);
++        db_query("INSERT INTO {account_reminder} (uid, last_reminder, msg_cnt) VALUES (%d, %d, %d)", $row->uid, time(), ($row->msg_cnt + 1));
++      }
+     }
+-    elseif (((int)((time() - $row->last_reminder) / 86400)) > $period && ($row->msg_cnt >= 0 && ($row->msg_cnt < $total_messages))) {
+-      account_reminder_send_email($row);
++	elseif ($row->msg_block == 0 && ($row->login + (60 * 60 * 24 * $first_wait_block) < time())) {
++	  account_reminder_block_send_email($row);
+       db_query("DELETE FROM {account_reminder} WHERE uid = %d", $row->uid);
+-      db_query("INSERT INTO {account_reminder} (uid, last_reminder, msg_cnt) VALUES (%d, %d, %d)", $row->uid, time(), ($row->msg_cnt + 1));
+-    }
++      db_query("INSERT INTO {account_reminder} (uid, last_reminder, msg_cnt, msg_block) VALUES (%d, %d, %d, %d)", $row->uid, time(), $row->msg_cnt, ($row->msg_block + 1));
++	}
++	elseif (((time() - $row->last_reminder) / 86400) > $period_block && ($row->msg_block >= 0 && ($row->msg_block + 1 < $total_messages_block))) {
++	  account_reminder_block_send_email($row);
++      db_query("DELETE FROM {account_reminder} WHERE uid = %d", $row->uid);
++      db_query("INSERT INTO {account_reminder} (uid, last_reminder, msg_cnt, msg_block) VALUES (%d, %d, %d, %d)", $row->uid, time(), $row->msg_cnt, ($row->msg_block + 1));
++	}
++	elseif (((time() - $row->last_reminder) / 86400) > $period_block && ($row->msg_block >= 0 && ($row->msg_block = $total_messages_block))) {
++	  /*account_reminder_isblock_send_email($row);*/
++	  db_query("DELETE FROM {account_reminder} WHERE uid = %d", $row->uid);
++	  db_query("UPDATE {users} SET login = %d WHERE uid = %d", time(), $row->uid); /* SET status = 0 , was used before to block users */
++	}
+   }
+ }
+ 
+@@ -200,7 +353,12 @@ function account_reminder_mail($key, &$message, $params) {
+   $variables = array(
+     '%site' => variable_get('site_name', ''),
+     '%username' => $params['user']->name,
++	'%countreminders' => $params['user']->msg_cnt + 1,
++	'%countremindersblock' => $params['user']->msg_block + 1,
++	'%totalreminders' => $params['context']['totalreminders'],
+     '%password' => $params['context']['pass'],
++	'%logintime' => format_date($params['context']['logintime'], $type = 'small'),
++	'%loginbefore' => format_date($params['context']['loginbefore'], $type = 'small'),
+     '%login_uri' => $params['context']['login_uri'],
+     '%login_url' => $params['context']['login_url'],
+     '%unsubscribe_url' => $params['context']['unsubscribe_url'],
+@@ -226,10 +384,11 @@ function account_reminder_unsubscribe_url($user) {
+  * This user does not want us spamming them any more!
+  */
+ function account_reminder_unsubscribe($uid, $hash) {
++  $totalreminders = variable_get('account_reminder_nologin_total',5);
+   $account = user_load(array('uid' => $uid));
+   if ($hash == md5($uid . $account->pass)) {
+-    db_query("UPDATE {account_reminder} SET msg_cnt = -1 WHERE uid = %d", $uid);
+-    drupal_set_message(t('Account reminder emails successfully cancelled'));
++    db_query("UPDATE {account_reminder} SET msg_block = %d WHERE uid = %d", $totalreminders, $uid);
++    drupal_set_message(t('Account deactivated successfully. Your account will be blocked tonight. Please don\'t login anymore!'));
+     drupal_goto();
+   }
+   else{
+@@ -241,43 +400,94 @@ function account_reminder_unsubscribe($uid, $hash) {
+ /**
+  * Sends the email out.
+  */
+-function account_reminder_send_email($user) {
++function account_reminder_nologin_send_email($user) {
+   $context = array();
+ 
+   // Assign the user a new password because we do not know the old one!!!
+-  $pass = user_password();
++  /*$pass = user_password();
+   user_save($user, array('pass' => $pass));
+-  $user->pass = md5($pass);
++  $user->pass = md5($pass);*/
+ 
+   $headers = array();
+-  $bcc = variable_get('account_reminder_bcc', '');
++  /*$bcc = variable_get('account_reminder_bcc', '');*/
+   
+-  if ($bcc) {
++  /*if ($bcc) {
+     $headers['Bcc'] = $bcc;
+-  }
++  }*/
+ 
+-  $context['pass'] = $pass;
++  /*$context['pass'] = $pass;*/
+   $context['login_uri'] = url('user', array('absolute' => TRUE));
+-  $context['login_url'] = user_pass_reset_url($user);
++  /*$context['login_url'] = user_pass_reset_url($user);*/
+   $context['unsubscribe_url'] = account_reminder_unsubscribe_url($user);
++  $context['totalreminders'] = variable_get('account_reminder_total', 3);
+   $context['subject'] = variable_get('account_reminder_subject', 'Account details for %username at %site');
+   $context['body'] = variable_get('account_reminder_msg', 
+-t("%username,
++t("Dear %username,
+ 
+-This is a reminder from %site. You have registered for a user account but have not yet validated your email address. To fully activate your account at %login_uri login use the following username and password:
++This is a reminder (reminder nr. %countreminders from %totalreminders reminders) from %site. You have registered for a user account but have not yet logged in to the site. To fully activate your account you have to login and fill in your credentials.
++
++You can login at %login_uri using the following username:
+ 
+ username: %username
+-password: %password
+ 
+-You may also log in by clicking on this link or copying and pasting it in your browser:
+-%login_url
++If you lost your password you can request a new password on the site.
++
+ 
+-This is a one-time login, so it can be used only once.
++--  %site team
++
++If you don't want to use %site anymore you can remove your account by using the link below:
++%unsubscribe_url")
++);
++
++  $language = user_preferred_language($user);
++  $params = array('user' => $user, 'context' => $context, 'headers' => $headers);
++  drupal_mail('account_reminder', 'account_reminder_email', $user->mail, $language, $params);
++  watchdog("account_reminder", t("Reminder email sent to !user at !email.", array('!user' => $user->name, '!email' => $user->mail)));
++}
++
++/**
++ * Sends the email out.
++ */
++function account_reminder_block_send_email($user) {
++  $context = array();
++
++  // Assign the user a new password because we do not know the old one!!!
++  /*$pass = user_password();
++  user_save($user, array('pass' => $pass));
++  $user->pass = md5($pass);*/
++
++  $headers = array();
++  /*$bcc = variable_get('account_reminder_bcc', '');*/
++  
++  /*if ($bcc) {
++    $headers['Bcc'] = $bcc;
++  }*/
++
++  /*$context['pass'] = $pass;*/
++  $context['login_uri'] = url('user', array('absolute' => TRUE));
++  /*$context['login_url'] = user_pass_reset_url($user);*/
++  $context['unsubscribe_url'] = account_reminder_unsubscribe_url($user);
++  $context['totalreminders'] = variable_get('account_reminder_nologin_total', 3) - 1;
++  $context['logintime'] = $user->login;
++  $context['loginbefore'] = $user->login + (60 * 60 * 24 * (variable_get('account_reminder_first_blocknotify', 3) + (variable_get('account_reminder_nologin_total', 3) * variable_get('account_reminder_nologin_frequency', 3))));
++  $context['subject'] = variable_get('account_reminder_block_subject', 'Please login at %site for %username');
++  $context['body'] = variable_get('account_reminder_block_msg', 
++t("Dear %username,
++
++This is a reminder (reminder nr. %countremindersblock from %totalreminders reminders) from %site. You have not logged in since %logintime. If you still want to use %site, please login and your account stays activated.
++
++If you don't login BEFORE %loginbefore your account get's blocked.
++
++You can login at %login_uri using the following username:
++
++username: %username
++
++If you lost your password you can request a new password on the site.
+ 
+ 
+ --  %site team
+ 
+-You can stop receiving these reminder emails by either activating your account, or using the unsubscribe link below:
++If you don't want to use %site anymore you can remove your account by using the link below:
+ %unsubscribe_url")
+ );
+ 
+@@ -286,3 +496,29 @@ You can stop receiving these reminder emails by either activating your account,
+   drupal_mail('account_reminder', 'account_reminder_email', $user->mail, $language, $params);
+   watchdog("account_reminder", t("Reminder email sent to !user at !email.", array('!user' => $user->name, '!email' => $user->mail)));
+ }
++
++/**
++ * Sends the "user is blocked" email out.
++ */
++function account_reminder_isblock_send_email($user) {
++  $context = array();
++
++  $headers = array();
++
++  $context['subject'] = variable_get('account_reminder_isblock_subject', 'Your account at %site for %username is blocked');
++  $context['body'] = variable_get('account_reminder_isblock_msg', 
++t("Dear %username,
++
++This is a message from %site. You have not logged in before the date we suggested you, so we assume you don't want to use %site anymore.
++
++Your account is blocked now.
++
++
++--  %site team")
++);
++
++  $language = user_preferred_language($user);
++  $params = array('user' => $user, 'context' => $context, 'headers' => $headers);
++  drupal_mail('account_reminder', 'account_reminder_email', $user->mail, $language, $params);
++  watchdog("account_reminder", t("Reminder email sent to !user at !email.", array('!user' => $user->name, '!email' => $user->mail)));
++}
+-- 
+2.16.3
+
