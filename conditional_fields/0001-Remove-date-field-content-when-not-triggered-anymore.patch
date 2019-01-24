@@ -1,0 +1,93 @@
+From 100cbaeab4e1e63ad78252620317c550cf9a2eb4 Mon Sep 17 00:00:00 2001
+From: Tim Lievens <timlievens@gmail.com>
+Date: Wed, 16 Jan 2019 22:06:45 +0100
+Subject: [PATCH 1/1] Remove date field content when not triggered anymore
+
+---
+ conditional_fields.module | 27 +++++++++++++++++++++++++++
+ includes/date.inc         | 21 +++++++++++++++++++++
+ 2 files changed, 48 insertions(+)
+ create mode 100644 includes/date.inc
+
+diff --git a/conditional_fields.module b/conditional_fields.module
+index 8209a37..5ae4e84 100755
+--- a/conditional_fields.module
++++ b/conditional_fields.module
+@@ -967,6 +967,8 @@ function conditional_fields_node_form_validate($form, &$form_state) {
+               if (function_exists($callback)) {
+                 $items = $callback($form, $form_state, $controlled_field_info, 0);
+               }
++              // Support special non-core CCK fields.
++              conditional_fields_reset_default($controlled_field_info, $items);
+             }
+             $form_state['values'][$controlled_field_name] = $items;
+         }
+@@ -998,6 +1000,8 @@ function conditional_fields_node_form_validate($form, &$form_state) {
+                 if (function_exists($callback)) {
+                   $items = $callback($form, $form_state, $field_in_group_info, 0);
+                 }
++                // Support special non-core CCK fields.
++                conditional_fields_reset_default($field_in_group_info, $items);
+               }
+               $form_state['values'][$field_in_group] = $items;
+           }
+@@ -1007,6 +1011,29 @@ function conditional_fields_node_form_validate($form, &$form_state) {
+   }
+ }
+ 
++/**
++ * Helper function to reset special non-core CCK controlled fields.
++ */
++function conditional_fields_reset_default($field, &$items) {
++  // Support specicic non-core CCK widget modules in separate includes.
++  $report_files = file_scan_directory(dirname(__FILE__) . '/includes', '.*\.inc');
++  foreach ($report_files as $file) {
++    // File name conventions should follow the widget provider module name.
++    // Example: date.inc holds functions for date widget support.
++    if ($file->name == $field['widget']['module']) {
++      require_once($file->filename);
++      // Invoke pseudo-hook WIDGET_MODULE_conditional_fields_reset_default().
++      $function = "{$file->name}_conditional_fields_reset_default";
++      if (function_exists($function)) {
++        // Alter the items array by reference.
++        $function($field, $items);
++      }
++    }
++  }
++  // Allow other non-core CCK fields to provide support for Conditional fields.
++  drupal_alter('conditional_fields_reset_default', $items, $field);
++}
++
+ /**
+  * Checks if a submitted field value is empty.
+  */
+diff --git a/includes/date.inc b/includes/date.inc
+new file mode 100644
+index 0000000..e682dcb
+--- /dev/null
++++ b/includes/date.inc
+@@ -0,0 +1,21 @@
++<?php
++
++/**
++ * Implements pseudo-hook WIDGET_MODULE_conditional_fields_reset_default().
++ *
++ * @see conditional_fields_reset_default()
++ */
++function date_conditional_fields_reset_default($field, &$items) {
++  if ($field['widget']['module'] == 'date') {
++    // The date module is a special case. If there is no callback, we need to
++    // construct the real default value ourselves.
++    $process = date_process_values($field);
++    foreach ($process as $processed) {
++      if (!isset($items[0][$processed])) {
++        $items[0][$processed] = '';
++      }
++      $date = date_local_date($form, $form_state, 0, $items[0], date_default_timezone_name(), $field, $processed);
++      $items[0][$processed] = is_object($date) ? date_format($date, DATE_FORMAT_DATETIME) : '';
++    }
++  }
++}
+-- 
+2.16.3
+
