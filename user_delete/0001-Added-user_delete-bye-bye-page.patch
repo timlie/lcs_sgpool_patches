@@ -1,0 +1,218 @@
+From 814f3103c1006dd26646774ad0fff2f322ad6bb2 Mon Sep 17 00:00:00 2001
+From: Tim Lievens <timlievens@gmail.com>
+Date: Mon, 4 Feb 2019 20:38:34 +0100
+Subject: [PATCH 1/1] Added user_delete bye bye page
+
+---
+ user_delete.admin.inc | 57 +++++++++++++++++++++++++++++++++++++++++++---
+ user_delete.install   |  2 ++
+ user_delete.module    | 21 ++++++++++++++++-
+ user_delete.pages.inc | 63 +++++++++++++++++++++++++++++++++++++++++++++++++++
+ 4 files changed, 139 insertions(+), 4 deletions(-)
+ create mode 100644 user_delete.pages.inc
+
+diff --git a/user_delete.admin.inc b/user_delete.admin.inc
+index c5c6a61..bde3c54 100644
+--- a/user_delete.admin.inc
++++ b/user_delete.admin.inc
+@@ -32,16 +32,40 @@ function user_delete_settings() {
+         'user_delete_delete' => t('Delete the account and all content.'),
+       ),
+   );
++
++  $message = variable_get('user_delete_bye_bye_message', '');
++  $form['bye_bye'] = array(
++    '#type' => 'fieldset',
++    '#title' => t('"Bye Bye" page (optional)'),
++    '#description' => t('An optonal custom page to show to the user after their account is deleted. If the "Page content" field is empty this feature will not be used. Note: enabling or disabling this option will cause the menu cache to rebuild, so it may take an extra moment to finish updating.<br />The Bye-Bye page is currently: :status', array(':status' => empty($message) ? 'disabled' : 'enabled')),
++  );
++  if (!empty($message)) {
++    $form['bye_bye']['#description'] .= ' - ' . l(t('view the Bye-Bye page'), 'user/bye-bye') . '.';
++  }
++  $form['bye_bye']['user_delete_bye_bye_title'] = array(
++    '#type' => 'textfield',
++    '#title' => t('Page title'),
++    '#default_value' => variable_get('user_delete_bye_bye_title', 'Bye bye!'),
++    '#description' => t('The title to use on the optional Bye-Bye page.'),
++  );
++  $form['bye_bye']['user_delete_bye_bye_message'] = array(
++    '#type' => 'textarea',
++    '#title' => t('Page content'),
++    '#default_value' => $message,
++    '#description' => t('The content to show on the Bye-Bye page. HTML may be used. Leave blank to disable the Bye-Bye page.'),
++  );
++
+   $form['redirect'] = array(
+     '#type' => 'fieldset',
+-    '#title' => t('Redirect'),
++    '#title' => t('Redirect (optional)'),
+   );
+   $form['redirect']['user_delete_redirect'] = array(
+     '#type' => 'textfield',
+-    '#title' => t('Redirection page'),
++    '#title' => t('Redirection page (optional)'),
+     '#default_value' => variable_get('user_delete_redirect', ''),
+-    '#description' => t('Choose where to redirect your users after account deletion. Any valid Drupal path will do, e.g. %front or %node', array('%front' => '<front>', '%node' => 'node/1')),
++    '#description' => t('Choose where to redirect your users after account deletion. Any valid Drupal path will do, e.g. %front or %node. The Bye-Bye page will be checked first.', array('%front' => '<front>', '%node' => 'node/1')),
+   );
++
+   $form['backup'] = array(
+     '#type' => 'fieldset',
+     '#title' => t('Backup'),
+@@ -68,5 +92,32 @@ function user_delete_settings() {
+     '#options' => $options,
+     '#description' => t('The time frame after which the backup should be deleted from the filesystem.'),
+   );
++
++  // Extra submit handler.
++  $form['#submit'][] = 'user_delete_settings_submit';
++
+   return system_settings_form($form);
+ }
++
++/**
++ * Submission callback for the settings page.
++ */
++function user_delete_settings_submit(&$form, &$form_state) {
++  $old_message = variable_get('user_delete_bye_bye_message', '');
++
++  if (!empty($form_state['values']['user_delete_bye_bye_message'])) {
++    if ($old_message != $form_state['values']['user_delete_bye_bye_message']) {
++      // The $old_message was blank, therefore the page has been enabled.
++      if (empty($old_message)) {
++        menu_rebuild();
++        drupal_set_message(t('The Bye-Bye page has been enabled.'));
++      }
++    }
++  }
++
++  // The $old_message was not blank, therefore the page has been disabled.
++  elseif (!empty($old_message)) {
++    menu_rebuild();
++    drupal_set_message(t('The Bye-Bye page has been disabled.'));
++  }
++}
+diff --git a/user_delete.install b/user_delete.install
+index 4a48da1..4a7fbe5 100644
+--- a/user_delete.install
++++ b/user_delete.install
+@@ -30,5 +30,7 @@ function user_delete_uninstall() {
+   variable_del('user_delete_redirect');
+   variable_del('user_delete_backup');
+   variable_del('user_delete_backup_period');
++  variable_del('user_delete_bye_bye_message');
++  variable_del('user_delete_bye_bye_title');
+   variable_del('user_delete_default_action');
+ }
+\ No newline at end of file
+diff --git a/user_delete.module b/user_delete.module
+index 1af54bd..96dc39e 100644
+--- a/user_delete.module
++++ b/user_delete.module
+@@ -38,6 +38,19 @@ function user_delete_menu() {
+     'access arguments' => array('administer users'),
+     'file' => 'user_delete.admin.inc',
+   );
++
++  // Load the page title.
++  $message = filter_xss(variable_get('user_delete_bye_bye_message', ''));
++  if (!empty($message)) {
++    $items['user/bye-bye'] = array(
++      'title' => variable_get('user_delete_bye_bye_title', ''),
++      // 'description' => 'The p',
++      'page callback' => 'user_delete_bye_bye',
++      'access arguments' => array('access content'),
++      'file' => 'user_delete.pages.inc',
++    );
++  }
++
+   return $items;
+ }
+ 
+@@ -222,7 +235,13 @@ function user_delete_submit($form, &$form_state) {
+   // Clear the cache for anonymous users.
+   cache_clear_all();
+ 
+-  // Redirect
++  // Optionally redirect to the custom Bye-Bye page.
++  $message = filter_xss(variable_get('user_delete_bye_bye_message', ''));
++  if (!empty($message)) {
++    $redirect = 'user/bye-bye';
++  }
++
++  // Optionally redirect.
+   if (!empty($redirect)) {
+     drupal_goto($redirect);
+   }
+diff --git a/user_delete.pages.inc b/user_delete.pages.inc
+new file mode 100644
+index 0000000..96769d6
+--- /dev/null
++++ b/user_delete.pages.inc
+@@ -0,0 +1,63 @@
++<?php
++/**
++ * @file
++ * User delete - Bye-Bye page.
++ */
++
++/**
++ * Menu callback for the Bye-Bye page.
++ */
++function user_delete_bye_bye() {
++  global $user;
++
++  $is_admin = FALSE;
++  if (intval($user->uid) === 1) {
++    $is_admin = TRUE;
++    drupal_set_message(t('This is what the page will look like for users when their account is disabled or deleted.'), 'warning');
++  }
++
++  // In theory the visitor should only come here when redirected, if this is not
++  // the case then redirect to the homepage.
++  if (!$is_admin && empty($_SERVER['HTTP_REFERER'])) {
++    drupal_goto();
++  }
++
++  // Load the message.
++  $message = variable_get('user_delete_bye_bye_message', '');
++
++  // If there is no message to display, use the redirect instead. Strictly
++  // speaking this should not happen, but the menu cache may not have been
++  // rebuilt yet.
++  if (empty($message)) {
++    // Rebuild the menu cache, so this doesn't happen again.
++    menu_rebuild();
++
++    // Load the redirect destination.
++    $redirect = variable_get('user_delete_redirect', '');
++
++    // Non-admin users.
++    if (!$is_admin) {
++      // If there's no redirect destination assigned, this will load the
++      // homepage.
++      drupal_goto($redirect);
++    }
++    // Notify admin users as to what will happen.
++    else {
++      drupal_set_message(t('There is no Bye-Bye message assigned, so the user will be redirected to :path', array(':path' => $redirect)));
++      return '';
++    }
++  }
++
++  // Set the page title.
++  $title = check_plain(variable_get('user_delete_bye_bye_title', 'Bye bye!'));
++  if (!empty($title)) {
++    drupal_set_title($title);
++  }
++
++  // Adding a simple message will break caching on this page, which is what we
++  // want.
++  drupal_set_message(t('You have been logged out.'));
++
++  // Output the HTML, after filtering out any potential XSS flaws.
++  return filter_xss($message);
++}
+-- 
+2.14.3 (Apple Git-98)
+
