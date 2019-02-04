@@ -1,0 +1,30 @@
+From aa7a43096a68879c799b9fac9e613ded640efaaa Mon Sep 17 00:00:00 2001
+From: Tim Lievens <timlievens@gmail.com>
+Date: Mon, 4 Feb 2019 22:15:59 +0100
+Subject: [PATCH 1/1] Removed empty warning variable
+
+---
+ password_policy.module | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/password_policy.module b/password_policy.module
+index 1589d61..8a6a3de 100644
+--- a/password_policy.module
++++ b/password_policy.module
+@@ -392,7 +392,12 @@ function password_policy_user($op, &$edit, &$account, $category = NULL) {
+         $expiration = $policy['expiration'];
+         $warning = max(explode(',', $policy['warning']));
+         $expiration_seconds = $expiration*60*60*24;
+-        $warning_seconds = $warning*60*60*24;
++        if (is_numeric($warning)) {
++          $warning_seconds = $warning*60*60*24;
++        }
++        else {
++          $warning_seconds = 0;
++        }
+         // The policy was enabled
+         $policy_start = $policy['created'];
+         if (variable_get('password_policy_begin', 0) == 1) {
+-- 
+2.14.3 (Apple Git-98)
+
