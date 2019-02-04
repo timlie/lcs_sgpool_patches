@@ -1,0 +1,45 @@
+From aa09246b0b4f674ea98c5a2aa6a1ac237aeb6b6f Mon Sep 17 00:00:00 2001
+From: Tim Lievens <timlievens@gmail.com>
+Date: Mon, 4 Feb 2019 19:02:38 +0100
+Subject: [PATCH 1/1] Make it work with better messages
+
+---
+ disable_messages.module | 14 ++++++--------
+ 1 file changed, 6 insertions(+), 8 deletions(-)
+
+diff --git a/disable_messages.module b/disable_messages.module
+index c966379..3bd8fb9 100644
+--- a/disable_messages.module
++++ b/disable_messages.module
+@@ -44,6 +44,7 @@ function disable_messages_theme() {
+  * Implementation of hook_theme_registry_alter().
+  */
+ function disable_messages_theme_registry_alter(&$theme_registry) {
++  variable_set('disable_messages_original_theme_function_'.$GLOBALS['theme'], $theme_registry['status_messages']['function']);
+   $theme_registry['status_messages']['function'] = '_theme_disable_messages_status_messages';
+ }
+ 
+@@ -52,15 +53,12 @@ function disable_messages_theme_registry_alter(&$theme_registry) {
+  * status message output.
+  */
+ function _theme_disable_messages_status_messages($display = NULL) {
+-  // Retrieve messages
+-  $messages = drupal_get_messages($display);
+-
+-  // Filter messages if filtering is enabled.
+-  if (variable_get('disable_messages_enable', '1')) {
+-    $messages = disable_messages_apply_filters($messages);
++  if (isSet($_SESSION['messages']) and variable_get('disable_messages_enable', '1')) {
++    $_SESSION['messages'] = disable_messages_apply_filters($_SESSION['messages']);
+   }
+-  // Return themed status messages
+-  return theme('disable_messages_status_messages', array('messages' => $messages));
++  $original_function = variable_get('disable_messages_original_theme_function_'.$GLOBALS['theme'], 'theme_status_messages');
++
++  return $original_function($display);
+ }
+ 
+ /**
+-- 
+2.14.3 (Apple Git-98)
+
