@@ -1,0 +1,30 @@
+From a617c4a409808ca13cecd65450f4b1026bc93492 Mon Sep 17 00:00:00 2001
+From: Tim Lievens <timlievens@gmail.com>
+Date: Mon, 4 Feb 2019 19:11:33 +0100
+Subject: [PATCH 1/1] Patch for empty variable
+
+---
+ fivestar.module | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/fivestar.module b/fivestar.module
+index 549c500..0ce01e6 100644
+--- a/fivestar.module
++++ b/fivestar.module
+@@ -1403,7 +1403,12 @@ function theme_fivestar_static($rating, $stars = 5, $tag = 'vote') {
+   if (empty($stars)) {
+     $stars = 5;
+   }
+-  $numeric_rating = $rating/(100/$stars);
++  if (!is_numeric($rating)) {
++    $numeric_rating = 0;
++  }
++  else {
++    $numeric_rating = $rating/(100/$stars);
++  }
+   for ($n=1; $n <= $stars; $n++) {
+     $star_value = ceil((100/$stars) * $n);
+     $prev_star_value = ceil((100/$stars) * ($n-1));
+-- 
+2.14.3 (Apple Git-98)
+
