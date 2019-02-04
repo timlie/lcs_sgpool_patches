@@ -1,0 +1,25 @@
+From 5d9c740a6de99d13f37bd814e398957bbe94120b Mon Sep 17 00:00:00 2001
+From: Tim Lievens <timlievens@gmail.com>
+Date: Mon, 4 Feb 2019 16:29:12 +0100
+Subject: [PATCH 1/1] patched for referenced variable
+
+---
+ views_send.module | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/views_send.module b/views_send.module
+index 9b07b57..01308d6 100644
+--- a/views_send.module
++++ b/views_send.module
+@@ -295,7 +295,7 @@ function views_send_mail_action_validate($form, $form_state) {
+  *
+  * @see http://drupal.org/node/172152
+  */
+-function views_send_mail_action_submit($form, &$form_state) {
++function views_send_mail_action_submit($form, $form_state) {
+   $display = $form['display']['#value'];
+   $values =& $form_state['values'];
+   $return = array();
+-- 
+2.14.3 (Apple Git-98)
+
