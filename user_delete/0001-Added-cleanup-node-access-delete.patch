@@ -1,0 +1,24 @@
+From fdb85b06f90cc5ab56a690c5b6ee71011ace1ada Mon Sep 17 00:00:00 2001
+From: Tim Lievens <timlievens@gmail.com>
+Date: Mon, 4 Feb 2019 20:42:17 +0100
+Subject: [PATCH 1/1] Added cleanup node access delete
+
+---
+ user_delete.module | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/user_delete.module b/user_delete.module
+index 96dc39e..ac4e6e3 100644
+--- a/user_delete.module
++++ b/user_delete.module
+@@ -356,6 +356,7 @@ function user_delete_node_delete($nid) {
+ 
+   db_query('DELETE FROM {node} WHERE nid = %d', $node->nid);
+   db_query('DELETE FROM {node_revisions} WHERE nid = %d', $node->nid);
++  db_query('DELETE FROM {node_access} WHERE nid = %d', $node->nid);
+ 
+   // Call the node-specific callback (if any):
+   node_invoke($node, 'delete');
+-- 
+2.14.3 (Apple Git-98)
+
