@@ -1,0 +1,26 @@
+From edecf28e3793490cc39fd56b0aa3ad636bfdb581 Mon Sep 17 00:00:00 2001
+From: Tim Lievens <timlievens@gmail.com>
+Date: Mon, 4 Feb 2019 15:13:32 +0100
+Subject: [PATCH 1/1] checked empty join
+
+---
+ includes/handlers.inc | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/includes/handlers.inc b/includes/handlers.inc
+index e6fcd4b..ceb8258 100644
+--- a/includes/handlers.inc
++++ b/includes/handlers.inc
+@@ -649,6 +649,9 @@ class views_many_to_one_helper {
+           // query optimization, INNER joins are slightly faster, so use them
+           // when we know we can.
+           $join = $this->get_join();
++          if (!isset($join)) {
++            $join = new stdClass();
++          }
+           $join->type = 'INNER';
+           $this->handler->table_alias = $this->handler->query->ensure_table($this->handler->table, $this->handler->relationship, $join);
+           $this->handler->view->many_to_one_tables[$field] = $this->handler->value;
+-- 
+2.14.3 (Apple Git-98)
+
