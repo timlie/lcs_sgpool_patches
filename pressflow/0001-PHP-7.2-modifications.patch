@@ -1,0 +1,176 @@
+From e0d88ec113e38d35e38a5d204a605e8264fd71b6 Mon Sep 17 00:00:00 2001
+From: Tim Lievens <timlievens@gmail.com>
+Date: Fri, 18 Oct 2019 23:19:52 +0200
+Subject: [PATCH 1/1] PHP 7.2 modifications
+
+---
+ includes/database.inc | 32 +++++++++++++++++++++++---------
+ includes/menu.inc     | 13 ++++++++-----
+ includes/session.inc  |  4 +++-
+ 3 files changed, 34 insertions(+), 15 deletions(-)
+
+diff --git a/includes/database.inc b/includes/database.inc
+index 625fa18..74fb6b5 100644
+--- a/includes/database.inc
++++ b/includes/database.inc
+@@ -353,9 +353,16 @@ $db_mysql8_reserved_keywords = array(
+  *   TRUE if version check passes; otherwise FALSE.
+ */
+ function db_version_compare($driver, $version, $operator = '>=') {
+-  global $db_url;
++  global $db_url, $db_active_name;
+ 
+-  if (substr($db_url, 0, strlen($driver)) === $driver) {
++  if (is_array($db_url)) {
++    $db_active_url = array_key_exists($db_active_name, $db_url) ? $db_url[$db_active_name] : $db_url['default'];
++  }
++  else {
++    $db_active_url = $db_url;
++  }
++
++  if (substr($db_active_url, 0, strlen($driver)) === $driver) {
+     if (version_compare(db_version(), $version, $operator)) {
+       return TRUE;
+     }
+@@ -414,6 +421,12 @@ function db_prefix_tables($sql) {
+   return $sql;
+ }
+ 
++/**
++ * Active database connection name.
++ */
++global $db_active_name;
++$db_active_name = FALSE;
++
+ /**
+  * Activate a database for future queries.
+  *
+@@ -435,7 +448,8 @@ function db_prefix_tables($sql) {
+  */
+ function db_set_active($name = 'default') {
+   global $db_url, $db_slave_url, $db_type, $active_db, $active_slave_db;
+-  static $db_conns, $db_slave_conns, $active_name = FALSE;
++  global $db_active_name;
++  static $db_conns, $db_slave_conns;
+ 
+   if (empty($db_url)) {
+     include_once 'includes/install.inc';
+@@ -451,7 +465,7 @@ function db_set_active($name = 'default') {
+         $slave_connect_url = $db_slave_url[$name][$slave_index];
+       }
+       else {
+-        $slave_connect_url = $db_slave_url[$name];        
++        $slave_connect_url = $db_slave_url[$name];
+       }
+     }
+     else {
+@@ -461,7 +475,7 @@ function db_set_active($name = 'default') {
+         $slave_connect_url = $db_slave_url[$slave_index];
+       }
+       else {
+-        $slave_connect_url = $db_slave_url;        
++        $slave_connect_url = $db_slave_url;
+       }
+     }
+ 
+@@ -477,13 +491,13 @@ function db_set_active($name = 'default') {
+ 
+     $db_conns[$name] = db_connect($connect_url);
+     if (!empty($slave_connect_url)) {
+-      $db_slave_conns[$name] = db_connect($slave_connect_url); 
++      $db_slave_conns[$name] = db_connect($slave_connect_url);
+     }
+   }
+ 
+-  $previous_name = $active_name;
++  $previous_name = $db_active_name;
+   // Set the active connection.
+-  $active_name = $name;
++  $db_active_name = $name;
+   $active_db = $db_conns[$name];
+   if (isset($db_slave_conns[$name])) {
+     $active_slave_db = $db_slave_conns[$name];
+@@ -1008,7 +1022,7 @@ function db_ignore_slave() {
+     // the old data.
+     $duration = variable_get('maximum_replication_lag', 300);
+     // Set session variable with amount of time to delay before using slave.
+-    // This will stick around for 5 minutes by default. 
++    // This will stick around for 5 minutes by default.
+     // There is another $_Session variable 'not_slavesafe' for single queries.
+     $_SESSION['ignore_slave_server'] = $_SERVER['REQUEST_TIME'] + $duration;
+   }
+diff --git a/includes/menu.inc b/includes/menu.inc
+index 478ff98..d582792 100644
+--- a/includes/menu.inc
++++ b/includes/menu.inc
+@@ -395,7 +395,8 @@ function _menu_load_objects(&$item, &$map) {
+           // 'load arguments' in the hook_menu() entry, but they need
+           // some processing. In this case the $function is the key to the
+           // load_function array, and the value is the list of arguments.
+-          list($function, $args) = each($function);
++          $args = current($function);
++          $function = key($function);
+           $load_functions[$index] = $function;
+ 
+           // Some arguments are placeholders for dynamic items to process.
+@@ -1579,7 +1580,8 @@ function menu_set_active_trail($new_trail = NULL) {
+     }
+ 
+     $tree = menu_tree_page_data(menu_get_active_menu_name());
+-    list($key, $curr) = each($tree);
++    $curr = current($tree);
++    next($tree);
+ 
+     while ($curr) {
+       // Terminate the loop when we find the current path in the active trail.
+@@ -1593,7 +1595,8 @@ function menu_set_active_trail($new_trail = NULL) {
+           $trail[] = $curr['link'];
+           $tree = $curr['below'] ? $curr['below'] : array();
+         }
+-        list($key, $curr) = each($tree);
++        $curr = current($tree);
++        next($tree);
+       }
+     }
+     // Make sure the current page is in the trail (needed for the page title),
+@@ -1736,9 +1739,9 @@ function menu_rebuild() {
+     variable_del('menu_rebuild_needed');
+   }
+   lock_release('menu_rebuild');
+-  
++
+   db_query('COMMIT');
+-  
++
+   return TRUE;
+ }
+ 
+diff --git a/includes/session.inc b/includes/session.inc
+index 2786938..fca6d88 100644
+--- a/includes/session.inc
++++ b/includes/session.inc
+@@ -175,11 +175,12 @@ function sess_destroy_sid($sid) {
+         setcookie(session_name(), '', $_SERVER['REQUEST_TIME'] - 3600, $params['path'], $params['domain'], $params['secure'], $params['httponly']);
+       }
+       else {
+-        setcookie(session_name(), '', $_SERVER['REQUEST_TIME'] - 3600, $params['path'], $params['domain'], $params['secure']);      
++        setcookie(session_name(), '', $_SERVER['REQUEST_TIME'] - 3600, $params['path'], $params['domain'], $params['secure']);
+       }
+       unset($_COOKIE[session_name()]);
+     }
+   }
++  return TRUE;
+ }
+ 
+ /**
+@@ -190,6 +191,7 @@ function sess_destroy_sid($sid) {
+  */
+ function sess_destroy_uid($uid) {
+   db_query('DELETE FROM {sessions} WHERE uid = %d', $uid);
++  return TRUE;
+ }
+ 
+ function sess_gc($lifetime) {
+-- 
+2.16.3
+
